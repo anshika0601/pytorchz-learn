@@ -1,0 +1,215 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "gpuType": "T4",
+      "authorship_tag": "ABX9TyPvBUyg3WuLZNWDSLgcZ11P",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/anshika0601/pytorchz-learn/blob/main/Day11/CNNonCIFAR10withGPU\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "pO6FMCmk_VAA",
+        "outputId": "78c4d5fb-e1ca-48ee-9dcc-bc86bd6ce403"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "100%|██████████| 170M/170M [00:03<00:00, 49.5MB/s]\n"
+          ]
+        }
+      ],
+      "source": [
+        "#set up and data prep\n",
+        "import torch\n",
+        "import cuda\n",
+        "from torchvision.datasets import CIFAR10\n",
+        "from torchvision.transforms import transforms\n",
+        "from torch.utils.data import DataLoader\n",
+        "device=torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\")\n",
+        "transforms=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])\n",
+        "set_train=CIFAR10(root=\"./data\",train=True,download=True,transform=transforms)\n",
+        "set_test=CIFAR10(root=\"./data\",train=False,download=True,transform=transforms)\n",
+        "train_loader=DataLoader(set_train,batch_size=64,shuffle=True)\n",
+        "test_loader=DataLoader(set_test,batch_size=64,shuffle=False)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "#model architecture\n",
+        "import torch.nn as nn\n",
+        "import torch.nn.functional as F\n",
+        "class NNnet(nn.Module):\n",
+        "  def __init__(self):\n",
+        "    super(NNnet,self).__init__()\n",
+        "    self.conv1=nn.Conv2d(in_channels=3,out_channels=32,kernel_size=3,stride=1,padding=1)\n",
+        "    self.pool=nn.MaxPool2d(kernel_size=2,stride=2)\n",
+        "    self.conv2=nn.Conv2d(in_channels=32,out_channels=64,kernel_size=3,stride=1,padding=1)\n",
+        "    self.conv3=nn.Conv2d(in_channels=64,out_channels=128,kernel_size=3,stride=1,padding=1)\n",
+        "    self.fc1=nn.Linear(in_features=128*4*4,out_features=512)\n",
+        "    self.fc2=nn.Linear(in_features=512,out_features=10)\n",
+        "\n",
+        "  def forward(self,x):\n",
+        "    x=self.pool(F.relu(self.conv1(x)))\n",
+        "    x=self.pool(F.relu(self.conv2(x)))\n",
+        "    x=self.pool(F.relu(self.conv3(x)))\n",
+        "    x=x.view(-1,128*4*4)\n",
+        "    x=F.relu(self.fc1(x))\n",
+        "    x=self.fc2(x)\n",
+        "    return x\n"
+      ],
+      "metadata": {
+        "id": "K3qZJhV2Dd4k"
+      },
+      "execution_count": 2,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import torch.optim as optim\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "bvgffhwbUMYk"
+      },
+      "execution_count": 3,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "7a28ba11"
+      },
+      "source": [
+        "#model initialize\n",
+        "model=NNnet().to(device)\n",
+        "criterion=nn.CrossEntropyLoss()\n",
+        "optimizer=optim.Adam(model.parameters(),lr=0.001)"
+      ],
+      "execution_count": 4,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "f3464734",
+        "outputId": "4edf94cf-fc7b-47f5-828d-774788aadb34"
+      },
+      "source": [
+        "#training loop\n",
+        "num_epoch=5\n",
+        "for epoch in range(num_epoch):\n",
+        "  model.train()\n",
+        "  run_loss=0.0\n",
+        "  count=0\n",
+        "  total=0\n",
+        "\n",
+        "  for i,(images,labels) in enumerate(train_loader):\n",
+        "    images=images.to(device)\n",
+        "    labels=labels.to(device)\n",
+        "    optimizer.zero_grad()\n",
+        "    outputs=model(images)\n",
+        "    loss=criterion(outputs,labels)\n",
+        "    loss.backward()\n",
+        "    optimizer.step()\n",
+        "    run_loss+=loss.item()\n",
+        "    _,predicted=torch.max(outputs,1)\n",
+        "    total+=labels.size(0)\n",
+        "    count+=(predicted==labels).sum().item()\n",
+        "\n",
+        "  print(f\"epoch:{epoch} ,Loss:{run_loss/len(train_loader):.2f},Accuracy:{100*count/total:.4f}\")"
+      ],
+      "execution_count": 5,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "epoch:0 ,Loss:1.35,Accuracy:51.0720\n",
+            "epoch:1 ,Loss:0.90,Accuracy:68.0560\n",
+            "epoch:2 ,Loss:0.72,Accuracy:74.8280\n",
+            "epoch:3 ,Loss:0.58,Accuracy:79.6000\n",
+            "epoch:4 ,Loss:0.45,Accuracy:83.7300\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "af48d699",
+        "outputId": "30d1359c-a7df-4dac-a0cb-a3e71538b4b3"
+      },
+      "source": [
+        "#validation loop\n",
+        "model.eval()\n",
+        "correct,total=0,0\n",
+        "with torch.no_grad():\n",
+        "  for images, labels in test_loader:\n",
+        "        images, labels = images.to(device), labels.to(device)\n",
+        "        outputs = model(images)\n",
+        "        _, predicted = torch.max(outputs, 1)\n",
+        "        total += labels.size(0)\n",
+        "        correct += (predicted == labels).sum().item()\n",
+        "print(\"Test Accuracy: %.2f%%\" % (100*correct/total))"
+      ],
+      "execution_count": 7,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Test Accuracy: 76.86%\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "torch.save(model.state_dict(), \"cifar10_cnn.pth\")\n"
+      ],
+      "metadata": {
+        "id": "_F0_pwgSb5ba"
+      },
+      "execution_count": 8,
+      "outputs": []
+    }
+  ]
+}
